@@ -25,6 +25,7 @@ unsigned char Chip8::chip8_fontset[] = {
 
 Chip8::Chip8() { 
 	waiting_key = false; key_pressed = false; lastKey = -1;
+	drawFlag = false;
 }
 Chip8::~Chip8() { }
 
@@ -236,6 +237,7 @@ void Chip8::emulateCycle()
 					}
 				}
 			}
+
 			drawFlag = true;
 			pc += 2;
 		}
@@ -321,6 +323,9 @@ void Chip8::emulateCycle()
 			pc+=2;
 			break;
 		}
+		break;
+	default:
+		printf("%x opcode not supported... yet!", opcode);
 		break;
 	}
 	
