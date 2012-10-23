@@ -1,4 +1,4 @@
-﻿Build started 10/21/2012 3:23:51 AM.
+﻿Build started 10/22/2012 9:40:59 PM.
      1>Project "C:\Users\KRUSHER36\Documents\GitHub\Chip8-Emulator\Chip8\Chip8\Chip8.vcxproj" on node 2 (build target(s)).
      1>InitializeBuildStatus:
          Creating "Debug\Chip8.unsuccessfulbuild" because "AlwaysCreate" was specified.
@@ -19,4 +19,4 @@
 
 Build succeeded.
 
-Time Elapsed 00:00:00.80
+Time Elapsed 00:00:00.77

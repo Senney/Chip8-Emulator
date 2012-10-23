@@ -4,6 +4,10 @@
 
 #include "Chip8.h"
 
+// Argument macros
+#define ARG1 ((opcode & 0x0F00) >> 8)
+#define ARG2 ((opcode & 0x00F0) >> 4)
+
 unsigned char Chip8::chip8_fontset[] = { 
 	  0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
 	  0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -59,7 +63,7 @@ void Chip8::initialize()
 
 	// Load the fontset. 
 	for (i = 0; i < 80; i++)
-		this->memory[0x50 + i] = Chip8::chip8_fontset[i]; // Replace with fontset reference.
+		this->memory[i] = Chip8::chip8_fontset[i];
 }
 
 void Chip8::emulateCycle()
@@ -80,11 +84,10 @@ void Chip8::emulateCycle()
 			break;
 		case 0x00EE:
 			// Return from subroutine.
-			pc = this->stack[sp--];
-			break;
-		default:
-			pc = 0x200 + (opcode & 0x0FFF);
-			printf("Jumping to: %X\n", 0x200 + (opcode & 0x0FFF));
+			if (sp != 0)
+				pc = this->stack[--sp] + 2;
+			else
+				printf("Trying to pop from stack into negative stack space!\n");
 			break;
 		}
 		break;
@@ -96,40 +99,46 @@ void Chip8::emulateCycle()
 		// Subroutine call.
 
 		// Set the return address.
-		stack[sp] = pc;
-		++sp;
+		stack[sp++] = pc;
 
 		// Set the program counter to the srt address.
 		pc = opcode & 0x0FFF;
 		break;
 	case 0x3000:
 		// Skip next if VX = NN
-		if (this->V[(opcode & 0x0F00) >> 8] == (opcode & 0x00FF))
+		if (this->V[ARG1] == (opcode & 0x00FF))
 			this->pc += 4; // Skip forward to the next opcode;
 		else
 			this->pc += 2; // Do the next instruction.
 		break;
 	case 0x4000:
 		// Skip if VX != NN.
-		if (this->V[(opcode & 0x0F00) >> 8] != (opcode & 0x00FF))
+		if (this->V[ARG1] != (opcode & 0x00FF))
 			this->pc += 4;
 		else
 			this->pc += 2;
 
 		break;
 	case 0x5000:
-		if (this->V[(opcode & 0x0F00) >> 8] == this->V[(opcode & 0x00F0) >> 4])
+		// Skip next if VX == VY
+		if (this->V[ARG1] == this->V[ARG2])
 			this->pc += 4;
 		else
 			this->pc += 2;
 		break;
 	case 0x6000:
 		// Set VX to NN.
-		this->V[(opcode & 0x0F00) >> 8] = (opcode & 0x00FF);
+		this->V[ARG1] = (opcode & 0x00FF);
 		pc += 2;
 		break;
 	case 0x7000:
-		this->V[(opcode & 0x0F00) >> 8] += (opcode & 0x00FF);
+		// Add NN to VX.
+		if ((opcode & 0x00FF) > (0xFF - this->V[ARG1]))
+			this->V[0xF] = 1;
+		else
+			this->V[0xF] = 0;
+
+		this->V[ARG1] += (opcode & 0x00FF);
 		pc += 2;
 		break;
 	case 0x8000:
@@ -137,68 +146,67 @@ void Chip8::emulateCycle()
 		switch (opcode & 0x000F) {
 		case 0x0000:
 			// Set
-			this->V[(opcode & 0x0F00) >> 8] = this->V[(opcode & 0x00F0) >> 4];
+			this->V[ARG1] = this->V[ARG2];
 			break;
 		case 0x0001:
 			// Bitwise or.
-			this->V[(opcode & 0x0F00) >> 8] |= this->V[(opcode & 0x00F0) >> 4];
+			this->V[ARG1] |= this->V[ARG2];
 			break;
 		case 0x0002:
 			// bitwise and.
-			this->V[(opcode & 0x0F00) >> 8] &= this->V[(opcode & 0x00F0) >> 4];
+			this->V[ARG1] &= this->V[ARG2];
 			break;
 		case 0x0003:
 			// bitwise xor.
-			this->V[(opcode & 0x0F00) >> 8] ^= this->V[(opcode & 0x00F0) >> 4];
+			this->V[ARG1] ^= this->V[ARG2];
 			break;
 		case 0x0004:
 			// Add two registers.
-			if (this->V[(opcode & 0x00F0) >> 4] > (0xFF - this->V[(opcode & 0x0F00) >> 8]))
+			if (this->V[ARG2] > (0xFF - this->V[ARG1]))
 				this->V[0xF] = 1; // Set the carry flag.
 			else
 				this->V[0xF] = 0; // Clear the carry flag.
-			break;
 
-			this->V[(opcode & 0x0F00) >> 8] += this->V[(opcode & 0x00F0) >> 4];
-			pc += 2;
+			this->V[ARG1] += this->V[ARG2];
+			break;
 		case 0x0005:
 			// Subtract two registers.
-			if (this->V[(opcode & 0x00F0) >> 4] > this->V[(opcode & 0x0F00) >> 8])
-				this->V[0xF] = 1;
-			else
+			if (this->V[ARG2] > this->V[ARG1])
 				this->V[0xF] = 0;
+			else
+				this->V[0xF] = 1;
 
-			this->V[(opcode & 0x0F00) >> 8] -= this->V[(opcode & 0x00F0) >> 4];
+			this->V[ARG1] -= this->V[ARG2];
 			break;
 		case 0x0006:
 			// Set VF to the least significant bit.
 			this->V[0xF] = (opcode & 0x0001);
 
 			// Shift right.
-			this->V[(opcode & 0x0F00) >> 8] >>= 1;
+			this->V[ARG1] >>= 1;
 			break;
 		case 0x0007:
 			// VX = VY - VX
-			if (this->V[(opcode & 0x0F00) >> 8] > this->V[(opcode & 0x00F0) >> 4])
+			if (this->V[ARG1] > this->V[ARG2])
 				this->V[0xF] = 1;
 			else
 				this->V[0xF] = 0;
 
-			this->V[(opcode & 0x0F00) >> 8] = this->V[(opcode & 0x00F0) >> 4] - this->V[(opcode & 0x0F00) >> 8];
+			this->V[ARG1] = this->V[ARG2] - this->V[ARG1];
 			break;
 		case 0x000E:
 			// Set VF to the least significant bit.
 			this->V[0xF] = (opcode & 0x0001);
 
 			// Shift right.
-			this->V[(opcode & 0x0F00) >> 8] <<= 1;
+			this->V[ARG1] <<= 1;
 			break;
 		}
 		pc += 2;
 		break;
 	case 0x9000:
 		// Skip next if VX != VY
-		if (V[(opcode & 0x0F00) >> 8] == V[(opcode & 0x00F0) >> 4])
+		if (V[ARG1] == V[ARG2])
 			this->pc += 4;
 		else
 			this->pc += 2;
@@ -214,14 +222,14 @@ void Chip8::emulateCycle()
 		break;
 	case 0xC000:
 		// Set VX to rand() & NN
-		this->V[(opcode & 0x0F00) >> 8] = rand() & (opcode & 0x00FF);
+		this->V[ARG1] = rand() & (opcode & 0x00FF);
 		pc += 2;
 		break;
 	case 0xD000:
 		{
 			// Draw sprite to screen.
-			unsigned short x = this->V[(opcode & 0x0F00) >> 8];
-			unsigned short y = this->V[(opcode & 0x00F0) >> 4];
+			unsigned short x = this->V[ARG1];
+			unsigned short y = this->V[ARG2];
 			unsigned short h = opcode & 0x000F;
 			unsigned short pixel;
 
@@ -248,34 +256,36 @@ void Chip8::emulateCycle()
 		char k;
 		switch (opcode & 0x00FF) {
 		case 0x009E:
-			k = this->V[(opcode & 0x0F00) >> 8];
+			k = this->V[ARG1];
 			if (k > 16)
 				break;
 			if (this->key[k] == 1) pc += 2;
 			break;
 		case 0x00A1:
-			k = this->V[(opcode & 0x0F00) >> 8];
+			k = this->V[ARG1];
 			if (k > 16)
 				break;
 			if (this->key[k] == 0) pc += 2;
 			break;
 		}
+		printf("Expecting: %d\n", k);
 		pc += 2;
 		break;
 	case 0xF000:
 		// 9 timer cases
 		switch (opcode & 0x00FF) {
 		case 0x0007:
-			this->V[(opcode & 0x0F00) >> 8] = this->delay_timer;
+			this->V[ARG1] = this->delay_timer;
 			pc += 2;
 			break;
 		case 0x000A:
 			// Wait for keypress.
 			if (waiting_key) {
 				if (key_pressed && lastKey != -1) {
-					this->V[(opcode & 0x0F00) >> 8] = (unsigned char)key[lastKey];
+					this->V[ARG1] = (unsigned char)key[lastKey];
 
 					key_pressed = false;
+					waiting_key = false;
 					lastKey = -1;
 					pc += 2;
 				}
@@ -285,37 +295,42 @@ void Chip8::emulateCycle()
 			break;
 		case 0x0015:
 			// Set delay timer to VX.
-			this->delay_timer = this->V[(opcode & 0x0F00) >> 8];
+			this->delay_timer = this->V[ARG1];
 			pc += 2;
 			break;
 		case 0x0018:
 			// Set sound timer to VX
-			this->sound_timer = this->V[(opcode & 0x0F00) >> 8];
+			this->sound_timer = this->V[ARG1];
 			pc += 2;
 			break;
 		case 0x001E:
 			// Add VX to I.
-			this->I += this->V[(opcode & 0x0F00) >> 8];
+			this->I += this->V[ARG1];
 			pc += 2;
 			break;
 		case 0x0029:
-			this->I = 0x50 + this->V[(opcode & 0x0F00) >> 8];
+			// Get the memory location of a character.
+			this->I = this->V[ARG1] * 0x5;
 			pc += 2;
 			break;
 		case 0x0033:
-			this->memory[this->I]		= this->V[(opcode & 0x0F00) >> 8] / 100;
-			this->memory[this->I + 1]	= (this->V[(opcode & 0x0F00) >> 8] / 10) % 10;
-			this->memory[this->I + 2]	= (this->V[(opcode & 0x0F00) >> 8] % 100) % 10;
+			this->memory[this->I]		= this->V[ARG1] / 100;
+			this->memory[this->I + 1]	= (this->V[ARG1] / 10) % 10;
+			this->memory[this->I + 2]	= (this->V[ARG1] % 100) % 10;
 			pc += 2;
 			break;
 		case 0x0055:
-			for (char i = 0; i < ((opcode & 0x0F00) >> 8); i++) 
+			for (char i = 0; i <= (ARG1); i++) 
 				this->memory[this->I + i] = this->V[i];
+
+			I += ARG1 + 1;
 			pc += 2;
 			break;
 		case 0x0065:
-			for (char i = 0; i < ((opcode & 0x0F00) >> 8); i++) 
+			for (char i = 0; i <= (ARG1); i++) 
 				this->V[i] = this->memory[this->I + i];
+
+			I += ARG1 + 1;
 			pc += 2;
 			break;
 		default:
@@ -375,4 +390,15 @@ void Chip8::clearScreen() {
 
 unsigned char* Chip8::getGraphics() {
 	return graphics;
+}
+
+void Chip8::setKeys(unsigned short* keys) {
+	for (unsigned int i = 0; i < 16; i++) {
+		if (keys[i] != 0) {
+			this->key_pressed = true;
+			this->lastKey = i;
+		}
+
+		key[i] = keys[i];
+	}
 }

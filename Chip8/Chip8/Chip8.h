@@ -11,12 +11,11 @@ public:
 	void emulateCycle();
 
 	bool loadProgram(const char* filename);
-
-	
 	
 	// Flag to indicate whether a new frame should be drawn.
 	bool drawFlag;
 	unsigned char* getGraphics();
+	void setKeys(unsigned short* keys);
 	
 	// Hard-coded char set.
 	static unsigned char chip8_fontset[80];
